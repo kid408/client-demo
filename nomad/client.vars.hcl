@@ -6,7 +6,7 @@ image = "client-demo:dev"
 
 consul_http_addr = "http://127.0.0.1:8500"
 
-consul_service_tags = []
+consul_service_tags = ["prometheus.enabled=true"]
 discovery_service_tags = []
 
 count  = 1

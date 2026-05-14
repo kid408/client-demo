@@ -320,6 +320,36 @@ func (a *app) virtualClientLoop(ctx context.Context, idx int) {
 		}
 
 		gatewayClient := sessionrpc.NewGatewayServiceClient(conn)
+		pingReply, err := gatewayClient.PingText(ctx, &sessionrpc.GatewayPingRequest{
+			Message: fmt.Sprintf("hello from %s", clientID),
+		})
+		if err != nil {
+			_ = conn.Close()
+			streamReconnectTotal.WithLabelValues("ping_error").Inc()
+			a.writeLog(logEntry{
+				Level:         "error",
+				Event:         "gateway_ping_failed",
+				ClientID:      clientID,
+				PeerID:        peerInfo.ID,
+				PeerAddress:   target,
+				TargetService: a.config.targetDiscoveryServiceName,
+				Detail:        err.Error(),
+			})
+			if !sleepWithContext(ctx, a.config.reconnectDelay) {
+				return
+			}
+			continue
+		}
+		a.writeLog(logEntry{
+			Level:         "info",
+			Event:         "gateway_ping_succeeded",
+			ClientID:      clientID,
+			PeerID:        pingReply.GatewayId,
+			PeerAddress:   target,
+			TargetService: a.config.targetDiscoveryServiceName,
+			Detail:        pingReply.Message,
+		})
+
 		stream, err := gatewayClient.OpenSession(ctx)
 		if err != nil {
 			_ = conn.Close()
@@ -438,11 +468,11 @@ func (a *app) runClientSessionCycles(ctx context.Context, clientID string, gatew
 
 func (a *app) sendAndVerify(stream sessionrpc.GatewayService_OpenSessionClient, clientID, sessionID string, userID uint64, deviceID, action, payload string) error {
 	event := &sessionrpc.ClientEvent{
-		EventID:   fmt.Sprintf("%s-%s-%d", clientID, action, time.Now().UnixNano()),
-		SessionID: sessionID,
-		ClientID:  clientID,
-		UserID:    userID,
-		DeviceID:  deviceID,
+		EventId:   fmt.Sprintf("%s-%s-%d", clientID, action, time.Now().UnixNano()),
+		SessionId: sessionID,
+		ClientId:  clientID,
+		UserId:    userID,
+		DeviceId:  deviceID,
 		Action:    action,
 		Payload:   payload,
 		SentAt:    time.Now().Format(time.RFC3339),
@@ -472,9 +502,9 @@ func (a *app) sendAndVerify(stream sessionrpc.GatewayService_OpenSessionClient, 
 		Action:    action,
 		ClientID:  clientID,
 		SessionID: sessionID,
-		EventID:   event.EventID,
-		PeerID:    ack.GatewayID,
-		Detail:    fmt.Sprintf("worker_id=%s %s", ack.WorkerID, ack.Message),
+		EventID:   event.EventId,
+		PeerID:    ack.GatewayId,
+		Detail:    fmt.Sprintf("worker_id=%s %s", ack.WorkerId, ack.Message),
 	})
 
 	if ackResult != "success" {
